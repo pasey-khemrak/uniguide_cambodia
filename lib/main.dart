@@ -33,7 +33,6 @@ class UniGuideApp extends StatelessWidget {
           primary: const Color(0xFF0D3B5E),
         ),
       ),
-
       initialRoute: '/onboarding',
       routes: {
         '/onboarding': (context) => const OnboardingScreen(),
