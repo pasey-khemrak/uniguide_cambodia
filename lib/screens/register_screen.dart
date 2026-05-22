@@ -29,7 +29,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Future<void> _createAccount() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
     if (_selectedYear == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select your graduation year')),
@@ -46,11 +48,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
         graduationYear: _selectedYear!,
       );
 
-      if (mounted) Navigator.pushReplacementNamed(context, '/home');
+      if (mounted) {
+        Navigator.pushReplacementNamed(context, '/home');
+      }
     } catch (error) {
       _showError(AuthService.messageForAuthError(error));
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -60,16 +66,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
     try {
       await AuthService.signInWithGoogle();
 
-      if (mounted) Navigator.pushReplacementNamed(context, '/home');
+      if (mounted) {
+        Navigator.pushReplacementNamed(context, '/home');
+      }
     } catch (error) {
       _showError(AuthService.messageForAuthError(error));
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
   void _showError(String message) {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
     );
@@ -219,8 +231,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             ),
                           ),
                           validator: (v) {
-                            if (v == null || v.isEmpty) return 'Enter a password';
-                            if (v.length < 8) return 'Password must be at least 8 characters';
+                            if (v == null || v.isEmpty) {
+                              return 'Enter a password';
+                            }
+                            if (v.length < 8) {
+                              return 'Password must be at least 8 characters';
+                            }
                             return null;
                           },
                         ),

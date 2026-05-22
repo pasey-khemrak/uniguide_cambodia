@@ -22,13 +22,17 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   }
 
   Future<void> _sendResetLink() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
     setState(() => _isLoading = true);
 
     try {
       await AuthService.sendPasswordResetEmail(_emailController.text);
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       setState(() => _emailSent = true);
     } catch (error) {
       if (mounted) {
@@ -37,7 +41,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         );
       }
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -166,8 +172,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 ),
                 validator: (v) {
-                  if (v == null || v.isEmpty) return 'Enter your email';
-                  if (!v.contains('@')) return 'Enter a valid email';
+                  if (v == null || v.isEmpty) {
+                    return 'Enter your email';
+                  }
+                  if (!v.contains('@')) {
+                    return 'Enter a valid email';
+                  }
                   return null;
                 },
               ),
