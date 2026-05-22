@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "799840218005",
+    "project_id": "uniguide-cambodia",
+    "storage_bucket": "uniguide-cambodia.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:799840218005:android:abb3327a7603b0b0cd249c",
+        "android_client_info": {
+          "package_name": "com.example.uniguide_cambodia"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBXOc_GchWNRKgQvUkNIM2sjTIy6kTVyDQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:799840218005:android:c47c6a5722aec2bfcd249c",
+        "android_client_info": {
+          "package_name": "com.kit.uniguidecambodia"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBXOc_GchWNRKgQvUkNIM2sjTIy6kTVyDQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
