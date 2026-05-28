@@ -92,7 +92,7 @@ class _SavedUniversityCard extends StatelessWidget {
               Positioned(
                 top: 18,
                 right: 18,
-                child: RatingBadge(rating: university.rating),
+                child: ReviewRatingBadge(universityId: university.id),
               ),
             ],
           ),

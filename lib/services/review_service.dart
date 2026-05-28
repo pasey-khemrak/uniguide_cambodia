@@ -27,12 +27,9 @@ class ReviewService {
     });
   }
 
-  static double averageRating(
-    List<UniversityReview> reviews,
-    double fallbackRating,
-  ) {
+  static double averageRating(List<UniversityReview> reviews) {
     if (reviews.isEmpty) {
-      return fallbackRating;
+      return 0;
     }
 
     final total = reviews.fold<double>(
@@ -64,11 +61,17 @@ class ReviewService {
     });
 
     await NotificationService.reviewAdded(universityId);
-    await NotificationService.savedUniversityReviewed(
-      universityId: universityId,
-      universityName: await _universityName(universityId),
-      reviewerId: user.uid,
-    );
+    try {
+      await NotificationService.savedUniversityReviewed(
+        universityId: universityId,
+        universityName: await _universityName(universityId),
+        reviewerId: user.uid,
+      );
+    } on FirebaseException catch (error) {
+      if (error.code != 'failed-precondition') {
+        rethrow;
+      }
+    }
   }
 
   static Future<void> updateReview({

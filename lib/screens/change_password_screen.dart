@@ -61,7 +61,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   Future<void> _sendResetEmail() async {
     await _runAction(() async {
       await AuthService.sendCurrentUserPasswordResetEmail();
-      return 'Password reset email sent. Check your inbox and spam folder.';
+      return 'Password reset email sent. If it is in Spam, tap "Report not spam" first so Gmail enables the link.';
     });
   }
 
@@ -190,13 +190,19 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        const Text(
-                          'Firebase sends reset links only to email/password accounts. If you use Google sign-in, change your password in Google Account settings.',
-                          style: TextStyle(color: Colors.black54, height: 1.45),
+                        Text(
+                          usesPassword
+                              ? 'Send a secure reset link to your account email if you do not remember your current password.'
+                              : 'This account uses Google sign-in, so password reset links are managed by Google Account settings.',
+                          style: const TextStyle(
+                            color: Colors.black54,
+                            height: 1.45,
+                          ),
                         ),
                         const SizedBox(height: 16),
                         OutlinedButton.icon(
-                          onPressed: _isWorking ? null : _sendResetEmail,
+                          onPressed:
+                              _isWorking || !usesPassword ? null : _sendResetEmail,
                           icon: const Icon(Icons.email_outlined),
                           label: const Text('Send Reset Email'),
                           style: OutlinedButton.styleFrom(

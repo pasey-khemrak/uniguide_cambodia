@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../models/university.dart';
+import '../models/university_review.dart';
+import '../services/review_service.dart';
 
 const primaryColor = Color(0xFF07586A);
 const accentColor = Color(0xFF7FE7DF);
@@ -105,6 +107,48 @@ class RatingBadge extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class ReviewRatingBadge extends StatelessWidget {
+  const ReviewRatingBadge({super.key, required this.universityId});
+
+  final String universityId;
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<UniversityReview>>(
+      stream: ReviewService.reviewsFor(universityId),
+      builder: (context, snapshot) {
+        final reviews = snapshot.data ?? const <UniversityReview>[];
+        return RatingBadge(rating: ReviewService.averageRating(reviews));
+      },
+    );
+  }
+}
+
+class ReviewRatingInline extends StatelessWidget {
+  const ReviewRatingInline({super.key, required this.universityId});
+
+  final String universityId;
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<UniversityReview>>(
+      stream: ReviewService.reviewsFor(universityId),
+      builder: (context, snapshot) {
+        final reviews = snapshot.data ?? const <UniversityReview>[];
+        final rating = ReviewService.averageRating(reviews);
+
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            StarRating(rating: rating, size: 14),
+            Text(' ${rating.toStringAsFixed(1)}'),
+          ],
+        );
+      },
     );
   }
 }
@@ -223,14 +267,14 @@ class UniversityListCard extends StatelessWidget {
         children: [
           Stack(
             children: [
-              UniversityImage(url: university.imageUrl, height: 178),
-              Positioned(
-                top: 12,
-                right: 12,
-                child: RatingBadge(rating: university.rating),
+                  UniversityImage(url: university.imageUrl, height: 178),
+                  Positioned(
+                    top: 12,
+                    right: 12,
+                    child: ReviewRatingBadge(universityId: university.id),
+                  ),
+                ],
               ),
-            ],
-          ),
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(

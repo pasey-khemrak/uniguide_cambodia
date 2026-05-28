@@ -126,7 +126,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         ),
         const SizedBox(height: 8),
         const Text(
-          'Enter your student email to receive a secure link to reset your account credentials.',
+          'Enter the email address you used with an email/password UniGuide account. Google sign-in passwords are managed by Google.',
           style: TextStyle(fontSize: 13, color: Colors.grey, height: 1.6),
         ),
         const SizedBox(height: 28),
@@ -261,7 +261,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         ),
         const SizedBox(height: 10),
         Text(
-          'We sent a password reset link to\n${_emailController.text}',
+          'We sent a password reset link to\n${_emailController.text.trim()}.\n\nIf it is in Spam, tap "Report not spam" first, then open it from Inbox so Gmail enables the link.',
           textAlign: TextAlign.center,
           style: const TextStyle(fontSize: 13, color: Colors.grey, height: 1.6),
         ),

@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 class AuthService {
@@ -8,6 +9,9 @@ class AuthService {
 
   static final FirebaseAuth _auth = FirebaseAuth.instance;
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  static final GoogleSignIn _googleSignIn = GoogleSignIn(
+    scopes: ['email', 'profile'],
+  );
 
   static Stream<User?> get authStateChanges => _auth.authStateChanges();
   static User? get currentUser => _auth.currentUser;
@@ -24,7 +28,7 @@ class AuthService {
   }) {
     return _auth.signInWithEmailAndPassword(
       email: email.trim(),
-      password: password.trim(),
+      password: password,
     );
   }
 
@@ -36,7 +40,7 @@ class AuthService {
   }) async {
     final credential = await _auth.createUserWithEmailAndPassword(
       email: email.trim(),
-      password: password.trim(),
+      password: password,
     );
 
     await credential.user?.updateDisplayName(name.trim());
@@ -45,6 +49,7 @@ class AuthService {
       data: {
         'name': name.trim(),
         'email': email.trim(),
+        'emailLower': email.trim().toLowerCase(),
         'graduationYear': graduationYear,
         'provider': 'password',
       },
@@ -56,21 +61,25 @@ class AuthService {
   static Future<UserCredential> signInWithGoogle() async {
     UserCredential credential;
 
-    if (kIsWeb) {
-      credential = await _auth.signInWithPopup(GoogleAuthProvider());
-    } else {
-      final googleUser = await GoogleSignIn().signIn();
-      if (googleUser == null) {
-        throw const AuthCancelledException();
+    try {
+      if (kIsWeb) {
+        credential = await _auth.signInWithPopup(GoogleAuthProvider());
+      } else {
+        final googleUser = await _googleSignIn.signIn();
+        if (googleUser == null) {
+          throw const AuthCancelledException();
+        }
+
+        final googleAuth = await googleUser.authentication;
+        final googleCredential = GoogleAuthProvider.credential(
+          accessToken: googleAuth.accessToken,
+          idToken: googleAuth.idToken,
+        );
+
+        credential = await _auth.signInWithCredential(googleCredential);
       }
-
-      final googleAuth = await googleUser.authentication;
-      final googleCredential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-
-      credential = await _auth.signInWithCredential(googleCredential);
+    } on PlatformException catch (error) {
+      throw _googlePlatformException(error);
     }
 
     await _saveUserProfile(
@@ -78,6 +87,7 @@ class AuthService {
       data: {
         'name': credential.user?.displayName ?? '',
         'email': credential.user?.email ?? '',
+        'emailLower': credential.user?.email?.trim().toLowerCase() ?? '',
         'photoUrl': credential.user?.photoURL,
         'provider': 'google.com',
       },
@@ -86,8 +96,25 @@ class AuthService {
     return credential;
   }
 
-  static Future<void> sendPasswordResetEmail(String email) {
-    return _auth.sendPasswordResetEmail(email: email.trim());
+  static Future<void> sendPasswordResetEmail(String email) async {
+    final normalizedEmail = email.trim();
+    final profile = await _findUserProfileByEmail(normalizedEmail);
+
+    if (profile == null) {
+      throw FirebaseAuthException(
+        code: 'user-not-found-for-reset',
+        message: 'No UniGuide account was found for this email.',
+      );
+    }
+
+    if (profile.provider.isNotEmpty && profile.provider != 'password') {
+      throw FirebaseAuthException(
+        code: 'provider-not-password',
+        message: 'This account uses Google sign-in.',
+      );
+    }
+
+    return _auth.sendPasswordResetEmail(email: profile.email);
   }
 
   static Future<void> sendCurrentUserPasswordResetEmail() async {
@@ -99,7 +126,14 @@ class AuthService {
       );
     }
 
-    await sendPasswordResetEmail(email);
+    if (!currentUserUsesPassword) {
+      throw FirebaseAuthException(
+        code: 'provider-not-password',
+        message: 'This account signs in with Google.',
+      );
+    }
+
+    await _auth.sendPasswordResetEmail(email: email.trim());
   }
 
   static Future<void> changeCurrentUserPassword({
@@ -130,12 +164,13 @@ class AuthService {
 
     await user.reauthenticateWithCredential(credential);
     await user.updatePassword(newPassword);
+    await user.reload();
   }
 
   static Future<void> signOut() async {
     await Future.wait([
       _auth.signOut(),
-      if (!kIsWeb) GoogleSignIn().signOut(),
+      if (!kIsWeb) _googleSignIn.signOut(),
     ]);
   }
 
@@ -171,25 +206,80 @@ class AuthService {
       case 'wrong-password':
       case 'invalid-credential':
         return 'Email or password is incorrect.';
+      case 'user-not-found-for-reset':
+        return 'No email/password UniGuide account was found for this email.';
       case 'email-already-in-use':
         return 'An account already exists with this email.';
       case 'weak-password':
         return 'Please use a stronger password.';
       case 'network-request-failed':
         return 'Network error. Check your internet connection.';
+      case 'google-sign-in-not-configured':
+        return 'Google sign-in is not fully configured for Android. Add this app SHA-1/SHA-256 in Firebase, download the new google-services.json, then rebuild.';
       case 'account-exists-with-different-credential':
         return 'This email is already linked to another sign-in method.';
       case 'popup-closed-by-user':
         return 'Google sign-in was closed before it finished.';
       case 'requires-recent-login':
-        return 'Please log out and sign in again before deleting your account.';
+        return 'Please sign out and sign in again, then try this security change.';
       case 'missing-email':
         return 'This account does not have an email address.';
       case 'provider-not-password':
         return 'This account signs in with Google. Change your password from your Google account settings.';
+      case 'permission-denied':
+        return 'The app cannot verify this email yet. Allow the password reset email lookup in Firestore rules.';
       default:
         return error.message ?? 'Authentication failed. Please try again.';
     }
+  }
+
+  static Future<_StoredUserProfile?> _findUserProfileByEmail(
+    String email,
+  ) async {
+    final normalizedEmail = email.trim();
+    if (normalizedEmail.isEmpty) {
+      return null;
+    }
+
+    final users = _firestore.collection('users');
+    final emailLower = normalizedEmail.toLowerCase();
+
+    final lowerSnapshot = await users
+        .where('emailLower', isEqualTo: emailLower)
+        .limit(1)
+        .get();
+    if (lowerSnapshot.docs.isNotEmpty) {
+      return _StoredUserProfile.fromData(lowerSnapshot.docs.first.data());
+    }
+
+    final exactSnapshot = await users
+        .where('email', isEqualTo: normalizedEmail)
+        .limit(1)
+        .get();
+    if (exactSnapshot.docs.isNotEmpty) {
+      return _StoredUserProfile.fromData(exactSnapshot.docs.first.data());
+    }
+
+    return null;
+  }
+
+  static FirebaseAuthException _googlePlatformException(
+    PlatformException error,
+  ) {
+    final details = '${error.code} ${error.message} ${error.details}';
+    if (details.contains('10:') ||
+        details.contains('DEVELOPER_ERROR') ||
+        details.contains('ApiException: 10')) {
+      return FirebaseAuthException(
+        code: 'google-sign-in-not-configured',
+        message: 'Google sign-in is not configured for this Android app.',
+      );
+    }
+
+    return FirebaseAuthException(
+      code: error.code,
+      message: error.message ?? 'Google sign-in failed.',
+    );
   }
 
   static Future<void> _deleteCollection(
@@ -233,4 +323,21 @@ class AuthService {
 
 class AuthCancelledException implements Exception {
   const AuthCancelledException();
+}
+
+class _StoredUserProfile {
+  const _StoredUserProfile({
+    required this.email,
+    required this.provider,
+  });
+
+  final String email;
+  final String provider;
+
+  factory _StoredUserProfile.fromData(Map<String, dynamic> data) {
+    return _StoredUserProfile(
+      email: (data['email'] as String? ?? '').trim(),
+      provider: data['provider'] as String? ?? '',
+    );
+  }
 }

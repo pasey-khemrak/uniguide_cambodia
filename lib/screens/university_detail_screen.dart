@@ -6,6 +6,7 @@ import '../models/university_review.dart';
 import '../services/auth_service.dart';
 import '../services/favorite_service.dart';
 import '../services/review_service.dart';
+import '../widgets/map_embed_view.dart';
 import '../widgets/uniguide_widgets.dart';
 
 class UniversityDetailScreen extends StatelessWidget {
@@ -19,10 +20,7 @@ class UniversityDetailScreen extends StatelessWidget {
       stream: ReviewService.reviewsFor(university.id),
       builder: (context, snapshot) {
         final reviews = snapshot.data ?? const <UniversityReview>[];
-        final averageRating = ReviewService.averageRating(
-          reviews,
-          university.rating,
-        );
+        final averageRating = ReviewService.averageRating(reviews);
 
         return Scaffold(
           backgroundColor: pageColor,
@@ -150,24 +148,49 @@ class UniversityDetailScreen extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 18),
-            Row(
-              children: [
-                Expanded(
-                  child: _InfoBox(
-                    icon: Icons.payments_outlined,
-                    label: 'Annual Tuition',
-                    value: university.tuition,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _InfoBox(
-                    icon: Icons.public,
-                    label: 'Curriculum',
-                    value: university.curriculum,
-                  ),
-                ),
-              ],
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final useStackedInfo = constraints.maxWidth < 360;
+
+                if (useStackedInfo) {
+                  return Column(
+                    children: [
+                      _InfoBox(
+                        icon: Icons.payments_outlined,
+                        label: 'Annual Tuition',
+                        value: university.tuition,
+                      ),
+                      const SizedBox(height: 12),
+                      _InfoBox(
+                        icon: Icons.public,
+                        label: 'Curriculum',
+                        value: university.curriculum,
+                      ),
+                    ],
+                  );
+                }
+
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: _InfoBox(
+                        icon: Icons.payments_outlined,
+                        label: 'Annual Tuition',
+                        value: university.tuition,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _InfoBox(
+                        icon: Icons.public,
+                        label: 'Curriculum',
+                        value: university.curriculum,
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 24),
             const _SectionLabel('About'),
@@ -201,12 +224,25 @@ class UniversityDetailScreen extends StatelessWidget {
                   _CampusMap(university: university),
                   const SizedBox(height: 10),
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.location_on_outlined, size: 15, color: Colors.black54),
+                      const Padding(
+                        padding: EdgeInsets.only(top: 2),
+                        child: Icon(
+                          Icons.location_on_outlined,
+                          size: 15,
+                          color: Colors.black54,
+                        ),
+                      ),
+                      const SizedBox(width: 5),
                       Expanded(
                         child: Text(
                           university.location,
-                          style: const TextStyle(color: Colors.black54),
+                          softWrap: true,
+                          style: const TextStyle(
+                            color: Colors.black54,
+                            height: 1.35,
+                          ),
                         ),
                       ),
                     ],
@@ -300,64 +336,87 @@ class _CampusMap extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasMapImage = university.mapImageUrl.trim().isNotEmpty;
+    final embedUrl = _embedMapUrl();
 
     return InkWell(
       borderRadius: BorderRadius.circular(6),
       onTap: () => _openMap(context),
       child: Ink(
-        height: 148,
+        height: 300,
         decoration: BoxDecoration(
-          color: const Color(0xFFE9F2EF),
+          color: const Color(0xFFF1F3F4),
           borderRadius: BorderRadius.circular(6),
           border: Border.all(color: const Color(0xFFD8DEE2)),
         ),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (hasMapImage)
-              UniversityImage(
-                url: university.mapImageUrl,
-                height: 148,
-                borderRadius: BorderRadius.circular(6),
-              )
-            else
-              const _GoogleMapPlaceholder(),
-            Positioned(
-              left: 12,
-              top: 12,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(6),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.12),
-                      blurRadius: 8,
-                    ),
-                  ],
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: MapEmbedView(
+            url: embedUrl,
+            fallback: Stack(
+              fit: StackFit.expand,
+              children: [
+                _GoogleMapPlaceholder(university: university),
+                Positioned(
+                  left: 12,
+                  top: 12,
+                  right: 72,
+                  child: _MapPlaceCard(university: university),
                 ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.map_outlined, color: primaryColor, size: 16),
-                    SizedBox(width: 6),
-                    Text(
-                      'Open in Google Maps',
-                      style: TextStyle(
-                        color: primaryColor,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
+                Positioned(
+                  right: 12,
+                  top: 12,
+                  child: _MapRoundButton(
+                    icon: Icons.open_in_full,
+                    tooltip: 'Open map',
+                    onTap: () => _openMap(context),
+                  ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
+  }
+
+  String _embedMapUrl() {
+    final savedEmbedUrl = university.mapEmbedUrl.trim();
+    if (savedEmbedUrl.isNotEmpty) {
+      final iframeSrc = RegExp(r'src="([^"]+)"').firstMatch(savedEmbedUrl);
+      final embedUrl = iframeSrc?.group(1) ?? savedEmbedUrl;
+
+      if (embedUrl.contains('/maps/embed')) {
+        return embedUrl;
+      }
+    }
+
+    final latitude = university.latitude;
+    final longitude = university.longitude;
+    if (latitude != null && longitude != null) {
+      final coordinates = '$latitude,$longitude';
+      return Uri.https('www.google.com', '/maps', {
+        'q': coordinates,
+        'll': coordinates,
+        'output': 'embed',
+        'hl': 'km',
+        't': 'k',
+        'z': '19',
+      }).toString();
+    }
+
+    final query = [
+      university.name,
+      university.address,
+      'Cambodia',
+    ].where((item) => item.trim().isNotEmpty).join(', ');
+
+    return Uri.https('www.google.com', '/maps', {
+      'q': query,
+      'output': 'embed',
+      'hl': 'km',
+      't': 'k',
+      'z': '18',
+    }).toString();
   }
 
   Future<void> _openMap(BuildContext context) async {
@@ -378,14 +437,50 @@ class _CampusMap extends StatelessWidget {
 }
 
 class _GoogleMapPlaceholder extends StatelessWidget {
-  const _GoogleMapPlaceholder();
+  const _GoogleMapPlaceholder({required this.university});
+
+  final University university;
 
   @override
   Widget build(BuildContext context) {
     return CustomPaint(
       painter: _GoogleMapPainter(),
-      child: const Center(
-        child: Icon(Icons.location_pin, color: Colors.red, size: 42),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.location_pin, color: Color(0xFFEA4335), size: 46),
+            Transform.translate(
+              offset: const Offset(0, -7),
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 180),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(4),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.16),
+                      blurRadius: 5,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Text(
+                  university.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Color(0xFFD93025),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -394,48 +489,198 @@ class _GoogleMapPlaceholder extends StatelessWidget {
 class _GoogleMapPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final roadPaint = Paint()
-      ..color = Colors.white
-      ..strokeWidth = 12
-      ..style = PaintingStyle.stroke;
-    final minorRoadPaint = Paint()
-      ..color = const Color(0xFFDADCE0)
-      ..strokeWidth = 4
-      ..style = PaintingStyle.stroke;
-
     canvas.drawRect(
       Offset.zero & size,
-      Paint()..color = const Color(0xFFE8F0E8),
+      Paint()..color = const Color(0xFFF4F7F3),
     );
     canvas.drawRect(
-      Rect.fromLTWH(0, size.height * 0.58, size.width, size.height * 0.42),
-      Paint()..color = const Color(0xFFD8EAD2),
+      Rect.fromLTWH(0, 0, size.width, size.height * 0.42),
+      Paint()..color = const Color(0xFFE8F1E6),
+    );
+    canvas.drawRect(
+      Rect.fromLTWH(0, size.height * 0.62, size.width, size.height * 0.38),
+      Paint()..color = const Color(0xFFDDEED9),
     );
 
-    canvas.drawLine(
-      Offset(0, size.height * 0.35),
-      Offset(size.width, size.height * 0.65),
-      roadPaint,
+    final minorRoadBorder = Paint()
+      ..color = const Color(0xFFD0D8DD)
+      ..strokeWidth = 5
+      ..style = PaintingStyle.stroke;
+    final minorRoad = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 3
+      ..style = PaintingStyle.stroke;
+    final mainRoadBorder = Paint()
+      ..color = const Color(0xFFD5DDE3)
+      ..strokeWidth = 19
+      ..style = PaintingStyle.stroke;
+    final mainRoad = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 14
+      ..style = PaintingStyle.stroke;
+
+    final roads = [
+      [Offset(-20, size.height * 0.30), Offset(size.width + 20, size.height * 0.54)],
+      [Offset(-20, size.height * 0.82), Offset(size.width + 20, size.height * 0.12)],
+      [Offset(size.width * 0.20, -20), Offset(size.width * 0.62, size.height + 20)],
+      [Offset(size.width * 0.78, -20), Offset(size.width * 0.34, size.height + 20)],
+      [Offset(-20, size.height * 0.48), Offset(size.width + 20, size.height * 0.67)],
+    ];
+
+    for (final road in roads) {
+      canvas.drawLine(road[0], road[1], minorRoadBorder);
+      canvas.drawLine(road[0], road[1], minorRoad);
+    }
+
+    final mainRoads = [
+      [Offset(-20, size.height * 0.38), Offset(size.width + 20, size.height * 0.58)],
+      [Offset(size.width * 0.30, -20), Offset(size.width * 0.58, size.height + 20)],
+    ];
+
+    for (final road in mainRoads) {
+      canvas.drawLine(road[0], road[1], mainRoadBorder);
+      canvas.drawLine(road[0], road[1], mainRoad);
+    }
+
+    _drawLabel(canvas, 'Northbridge St.', Offset(size.width * 0.06, size.height * 0.52));
+    _drawLabel(canvas, 'St 110', Offset(size.width * 0.72, size.height * 0.28));
+    _drawLabel(canvas, 'Ratanak Plaza', Offset(size.width * 0.60, size.height * 0.76));
+    _drawPoi(canvas, Icons.local_hospital, 'Hospital', Offset(size.width * 0.18, size.height * 0.72));
+    _drawPoi(canvas, Icons.shopping_bag, 'Market', Offset(size.width * 0.76, size.height * 0.42));
+  }
+
+  void _drawLabel(Canvas canvas, String text, Offset offset) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: const TextStyle(
+          color: Color(0xFF6B7280),
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    painter.paint(canvas, offset);
+  }
+
+  void _drawPoi(Canvas canvas, IconData icon, String label, Offset offset) {
+    canvas.drawCircle(offset, 10, Paint()..color = Colors.white);
+    canvas.drawCircle(offset, 8, Paint()..color = const Color(0xFF1A73E8));
+
+    final iconPainter = TextPainter(
+      text: TextSpan(
+        text: String.fromCharCode(icon.codePoint),
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 11,
+          fontFamily: icon.fontFamily,
+          package: icon.fontPackage,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    iconPainter.paint(
+      canvas,
+      offset - Offset(iconPainter.width / 2, iconPainter.height / 2),
     );
-    canvas.drawLine(
-      Offset(size.width * 0.25, 0),
-      Offset(size.width * 0.55, size.height),
-      roadPaint,
-    );
-    canvas.drawLine(
-      Offset(0, size.height * 0.72),
-      Offset(size.width, size.height * 0.32),
-      minorRoadPaint,
-    );
-    canvas.drawLine(
-      Offset(size.width * 0.78, 0),
-      Offset(size.width * 0.18, size.height),
-      minorRoadPaint,
-    );
+
+    _drawLabel(canvas, label, offset + const Offset(12, -7));
   }
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _MapPlaceCard extends StatelessWidget {
+  const _MapPlaceCard({required this.university});
+
+  final University university;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 260),
+      padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(3),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.18),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  university.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.black87,
+                    fontSize: 14,
+                    height: 1.15,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  university.address.isEmpty ? university.location : university.address,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.black54,
+                    fontSize: 11,
+                    height: 1.2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          const Icon(Icons.directions, color: Color(0xFF1A73E8), size: 22),
+        ],
+      ),
+    );
+  }
+}
+
+class _MapRoundButton extends StatelessWidget {
+  const _MapRoundButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      shape: const CircleBorder(),
+      elevation: 2,
+      child: IconButton(
+        tooltip: tooltip,
+        onPressed: onTap,
+        icon: Icon(icon, color: Colors.black54, size: 18),
+        constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+        padding: EdgeInsets.zero,
+      ),
+    );
+  }
 }
 
 class _InfoBox extends StatelessWidget {
@@ -456,13 +701,20 @@ class _InfoBox extends StatelessWidget {
         children: [
           Icon(icon, color: primaryColor),
           const SizedBox(height: 8),
-          Text(label, style: const TextStyle(color: Colors.black54, fontSize: 12)),
           Text(
-            value,
+            label,
             textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.black54, fontSize: 12),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            value.trim().isEmpty ? 'Not available' : value,
+            textAlign: TextAlign.center,
+            softWrap: true,
             style: const TextStyle(
               color: primaryColor,
-              fontSize: 16,
+              fontSize: 15,
+              height: 1.25,
               fontWeight: FontWeight.w900,
             ),
           ),

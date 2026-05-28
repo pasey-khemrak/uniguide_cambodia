@@ -16,11 +16,29 @@ class _SearchScreenState extends State<SearchScreen> {
   final _searchController = TextEditingController();
   var _query = '';
   var _showAll = false;
+  var _loadedInitialQuery = false;
 
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    if (_loadedInitialQuery) {
+      return;
+    }
+
+    final initialQuery = ModalRoute.of(context)?.settings.arguments;
+    if (initialQuery is String && initialQuery.trim().isNotEmpty) {
+      _query = initialQuery.trim();
+      _searchController.text = _query;
+    }
+
+    _loadedInitialQuery = true;
   }
 
   void _search(String query) {

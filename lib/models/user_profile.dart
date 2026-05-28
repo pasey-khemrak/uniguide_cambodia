@@ -74,10 +74,7 @@ class UserProfile {
       photoUrl: map['photoUrl'] as String? ?? '',
       interestedMajors:
           List<String>.from(map['interestedMajors'] as List? ?? const []),
-      education: (map['education'] as List? ?? const [])
-          .whereType<Map>()
-          .map((item) => UserEducation.fromMap(Map<String, dynamic>.from(item)))
-          .toList(),
+      education: _educationFromMap(map['education']),
     );
   }
 
@@ -105,5 +102,25 @@ class UserProfile {
       interestedMajors: interestedMajors ?? this.interestedMajors,
       education: education ?? this.education,
     );
+  }
+
+  static List<UserEducation> _educationFromMap(Object? value) {
+    if (value is List) {
+      return value
+          .whereType<Map>()
+          .map((item) => UserEducation.fromMap(Map<String, dynamic>.from(item)))
+          .where((item) => item.school.isNotEmpty || item.program.isNotEmpty)
+          .toList();
+    }
+
+    if (value is Map) {
+      return value.values
+          .whereType<Map>()
+          .map((item) => UserEducation.fromMap(Map<String, dynamic>.from(item)))
+          .where((item) => item.school.isNotEmpty || item.program.isNotEmpty)
+          .toList();
+    }
+
+    return const [];
   }
 }

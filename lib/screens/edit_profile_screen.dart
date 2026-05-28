@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -100,8 +101,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Future<void> _pickPhoto() async {
     final image = await ImagePicker().pickImage(
       source: ImageSource.gallery,
-      imageQuality: 80,
-      maxWidth: 900,
+      imageQuality: 65,
+      maxWidth: 600,
     );
 
     if (image == null) {
@@ -116,6 +117,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Future<void> _saveProfile() async {
+    _commitPendingEducation();
+
     final validationMessage = _profileValidationMessage();
     if (validationMessage != null) {
       setState(() {
@@ -127,14 +130,24 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
     setState(() {
       _isSaving = true;
-      _saveMessage = null;
+      _saveSucceeded = true;
+      _saveMessage = 'Saving profile...';
     });
 
     try {
       var photoUrl = widget.profile.photoUrl;
+      String? photoWarning;
       if (_pickedImage != null) {
-        photoUrl = await UserProfileService.uploadProfilePhoto(_pickedImage!)
-            .timeout(const Duration(seconds: 20));
+        try {
+          photoUrl = await UserProfileService.uploadProfilePhoto(_pickedImage!)
+              .timeout(const Duration(seconds: 60));
+        } on TimeoutException {
+          photoWarning =
+              ' Profile saved, but the photo upload timed out. Try a smaller image or check your internet connection.';
+        } on CloudinaryUploadException catch (error) {
+          photoWarning =
+              ' Profile saved, but the photo upload failed: ${error.message}.';
+        }
       }
 
       final updatedProfile = widget.profile.copyWith(
@@ -144,20 +157,26 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         bio: _bioController.text.trim(),
         email: _emailController.text.trim(),
         phone: _phoneController.text.trim(),
-        interestedMajors: _majors,
-        education: _education,
+        interestedMajors: _cleanMajors(),
+        education: _cleanEducation(),
         photoUrl: photoUrl,
       );
 
-      await UserProfileService.updateProfile(updatedProfile)
-          .timeout(const Duration(seconds: 20));
+      await UserProfileService.updateProfile(updatedProfile);
 
       if (mounted) {
         setState(() {
           _pickedImage = null;
           _pickedImageBytes = null;
           _saveSucceeded = true;
-          _saveMessage = 'Profile updated successfully.';
+          _saveMessage = 'Profile updated successfully.${photoWarning ?? ''}';
+        });
+      }
+    } on FirebaseException catch (error) {
+      if (mounted) {
+        setState(() {
+          _saveSucceeded = false;
+          _saveMessage = _firebaseSaveMessage(error);
         });
       }
     } on TimeoutException {
@@ -165,7 +184,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         setState(() {
           _saveSucceeded = false;
           _saveMessage =
-              'Saving took too long. Check Firebase rules and internet connection.';
+              'Saving took too long. Check your internet connection and try again.';
         });
       }
     } catch (error) {
@@ -182,6 +201,21 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
   }
 
+  String _firebaseSaveMessage(FirebaseException error) {
+    switch (error.code) {
+      case 'permission-denied':
+        return 'Firebase rules blocked this profile update. Allow this user to update their own users document, including education and interestedMajors.';
+      case 'resource-exhausted':
+        return 'This profile has too much information to save at once. Shorten the bio or remove some items.';
+      case 'unavailable':
+        return 'Firebase is unavailable right now. Check your internet connection and try again.';
+      case 'deadline-exceeded':
+        return 'Firebase took too long to save this profile. Check your connection and try again.';
+      default:
+        return 'Could not update profile: ${error.message ?? error.code}';
+    }
+  }
+
   String? _profileValidationMessage() {
     if (_nameController.text.trim().isEmpty) {
       return 'Enter your full name.';
@@ -189,6 +223,18 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
     if (!_emailController.text.trim().contains('@')) {
       return 'Enter a valid email.';
+    }
+
+    if (_bioController.text.trim().length > 800) {
+      return 'Keep your bio under 800 characters.';
+    }
+
+    if (_majors.length > 20) {
+      return 'Keep selected majors to 20 or fewer.';
+    }
+
+    if (_education.length > 10) {
+      return 'Keep education entries to 10 or fewer.';
     }
 
     return null;
@@ -232,6 +278,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     final program = _programController.text.trim();
 
     if (school.isEmpty || program.isEmpty) {
+      setState(() {
+        _saveSucceeded = false;
+        _saveMessage = 'Enter both school and program before adding education.';
+      });
       return;
     }
 
@@ -239,7 +289,46 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       _education.add(UserEducation(school: school, program: program));
       _schoolController.clear();
       _programController.clear();
+      _saveSucceeded = true;
+      _saveMessage = null;
     });
+  }
+
+  void _commitPendingEducation() {
+    final school = _schoolController.text.trim();
+    final program = _programController.text.trim();
+
+    if (school.isEmpty && program.isEmpty) {
+      return;
+    }
+
+    if (school.isEmpty || program.isEmpty) {
+      return;
+    }
+
+    _education.add(UserEducation(school: school, program: program));
+    _schoolController.clear();
+    _programController.clear();
+  }
+
+  List<String> _cleanMajors() {
+    return _majors
+        .map((major) => major.trim())
+        .where((major) => major.isNotEmpty)
+        .toSet()
+        .toList();
+  }
+
+  List<UserEducation> _cleanEducation() {
+    return _education
+        .map(
+          (item) => UserEducation(
+            school: item.school.trim(),
+            program: item.program.trim(),
+          ),
+        )
+        .where((item) => item.school.isNotEmpty && item.program.isNotEmpty)
+        .toList();
   }
 
   @override
@@ -279,243 +368,245 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 ),
                 padding: const EdgeInsets.fromLTRB(24, 24, 24, 28),
                 children: [
-                    _PreviewCard(
-                      name: _nameController.text,
-                      location: _locationController.text,
-                      photoUrl: widget.profile.photoUrl,
-                      pickedImageBytes: _pickedImageBytes,
-                      onPickPhoto: _pickPhoto,
-                    ),
-                    const SizedBox(height: 12),
-                    _FormPanel(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const _PanelTitle(
-                            icon: Icons.edit_note,
-                            title: 'Basic Information',
-                          ),
-                          const _FieldLabel('Full Name'),
-                          TextField(
-                            controller: _nameController,
-                            decoration: _inputDecoration(),
-                            onChanged: (_) => setState(() {}),
-                          ),
-                          const SizedBox(height: 18),
-                          const _FieldLabel('Location'),
-                          TextField(
-                            controller: _locationController,
-                            decoration: _inputDecoration(),
-                            onChanged: (_) => setState(() {}),
-                          ),
-                          const SizedBox(height: 18),
-                          const _FieldLabel('Current Grade / Status'),
-                          InputDecorator(
-                            decoration: _inputDecoration(),
-                            child: DropdownButtonHideUnderline(
-                              child: DropdownButton<String>(
-                                value: _status,
-                                isExpanded: true,
-                                items: _statuses.map((status) {
-                                  return DropdownMenuItem(
-                                    value: status,
-                                    child: Text(status),
-                                  );
-                                }).toList(),
-                                onChanged: (value) {
-                                  if (value != null) {
-                                    setState(() => _status = value);
-                                  }
-                                },
-                              ),
+                  _PreviewCard(
+                    name: _nameController.text,
+                    location: _locationController.text,
+                    photoUrl: widget.profile.photoUrl,
+                    pickedImageBytes: _pickedImageBytes,
+                    onPickPhoto: _pickPhoto,
+                  ),
+                  const SizedBox(height: 12),
+                  _FormPanel(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const _PanelTitle(
+                          icon: Icons.edit_note,
+                          title: 'Basic Information',
+                        ),
+                        const _FieldLabel('Full Name'),
+                        TextField(
+                          controller: _nameController,
+                          decoration: _inputDecoration(),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                        const SizedBox(height: 18),
+                        const _FieldLabel('Location'),
+                        TextField(
+                          controller: _locationController,
+                          decoration: _inputDecoration(),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                        const SizedBox(height: 18),
+                        const _FieldLabel('Current Grade / Status'),
+                        InputDecorator(
+                          decoration: _inputDecoration(),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: _status,
+                              isExpanded: true,
+                              items: _statuses.map((status) {
+                                return DropdownMenuItem(
+                                  value: status,
+                                  child: Text(status),
+                                );
+                              }).toList(),
+                              onChanged: (value) {
+                                if (value != null) {
+                                  setState(() => _status = value);
+                                }
+                              },
                             ),
                           ),
-                          const SizedBox(height: 18),
-                          const _FieldLabel('Bio'),
-                          TextField(
-                            controller: _bioController,
-                            maxLines: 5,
-                            decoration: _inputDecoration(),
+                        ),
+                        const SizedBox(height: 18),
+                        const _FieldLabel('Bio'),
+                        TextField(
+                          controller: _bioController,
+                          maxLines: 5,
+                          decoration: _inputDecoration(),
+                        ),
+                        const SizedBox(height: 20),
+                        const _PanelTitle(
+                          icon: Icons.account_balance_outlined,
+                          title: 'Education',
+                        ),
+                        if (_education.isEmpty)
+                          const Text(
+                            'No education added yet.',
+                            style: TextStyle(color: Colors.black54),
+                          )
+                        else
+                          ..._education.map((item) {
+                            return _EditableEducationTile(
+                              education: item,
+                              onDelete: () {
+                                setState(() => _education.remove(item));
+                              },
+                            );
+                          }),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _schoolController,
+                          decoration: _inputDecoration().copyWith(
+                            labelText: 'School / University',
                           ),
-                          const SizedBox(height: 20),
-                          const _PanelTitle(
-                            icon: Icons.account_balance_outlined,
-                            title: 'Education',
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _programController,
+                          decoration: _inputDecoration().copyWith(
+                            labelText: 'Program / Major',
                           ),
-                          if (_education.isEmpty)
-                            const Text(
-                              'No education added yet.',
-                              style: TextStyle(color: Colors.black54),
-                            )
-                          else
-                            ..._education.map((item) {
-                              return _EditableEducationTile(
-                                education: item,
-                                onDelete: () {
-                                  setState(() => _education.remove(item));
-                                },
+                        ),
+                        const SizedBox(height: 12),
+                        OutlinedButton.icon(
+                          onPressed: _addEducation,
+                          icon: const Icon(Icons.add),
+                          label: const Text('Add Education'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: primaryColor,
+                            side: const BorderSide(color: primaryColor),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        const _PanelTitle(
+                          icon: Icons.school_outlined,
+                          title: 'Interested Majors',
+                        ),
+                        const Text(
+                          'Suggested majors',
+                          style: TextStyle(
+                            color: Colors.black54,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Wrap(
+                          children: _majorSuggestions.map((major) {
+                            final selected = _majors.contains(major);
+                            return Padding(
+                              padding: const EdgeInsets.only(
+                                right: 8,
+                                bottom: 8,
+                              ),
+                              child: FilterChip(
+                                label: Text(major),
+                                selected: selected,
+                                selectedColor: accentColor,
+                                onSelected: selected
+                                    ? null
+                                    : (_) {
+                                        setState(() => _majors.add(major));
+                                      },
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Your selected majors',
+                          style: TextStyle(
+                            color: Colors.black54,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Wrap(
+                          children: [
+                            ..._majors.map((major) {
+                              return Padding(
+                                padding:
+                                    const EdgeInsets.only(right: 8, bottom: 8),
+                                child: InputChip(
+                                  label: Text(major),
+                                  backgroundColor: accentColor,
+                                  onDeleted: () {
+                                    setState(() => _majors.remove(major));
+                                  },
+                                ),
                               );
                             }),
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: _schoolController,
-                            decoration: _inputDecoration().copyWith(
-                              labelText: 'School / University',
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          TextField(
-                            controller: _programController,
-                            decoration: _inputDecoration().copyWith(
-                              labelText: 'Program / Major',
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          OutlinedButton.icon(
-                            onPressed: _addEducation,
-                            icon: const Icon(Icons.add),
-                            label: const Text('Add Education'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: primaryColor,
-                              side: const BorderSide(color: primaryColor),
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-                          const _PanelTitle(
-                            icon: Icons.school_outlined,
-                            title: 'Interested Majors',
-                          ),
-                          const Text(
-                            'Suggested majors',
-                            style: TextStyle(
-                              color: Colors.black54,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          Wrap(
-                            children: _majorSuggestions.map((major) {
-                              final selected = _majors.contains(major);
-                              return Padding(
-                                padding: const EdgeInsets.only(
-                                  right: 8,
-                                  bottom: 8,
-                                ),
-                                child: FilterChip(
-                                  label: Text(major),
-                                  selected: selected,
-                                  selectedColor: accentColor,
-                                  onSelected: selected
-                                      ? null
-                                      : (_) {
-                                          setState(() => _majors.add(major));
-                                        },
-                                ),
-                              );
-                            }).toList(),
-                          ),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'Your selected majors',
-                            style: TextStyle(
-                              color: Colors.black54,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          Wrap(
-                            children: [
-                              ..._majors.map((major) {
-                                return Padding(
-                                  padding: const EdgeInsets.only(
-                                      right: 8, bottom: 8),
-                                  child: InputChip(
-                                    label: Text(major),
-                                    backgroundColor: accentColor,
-                                    onDeleted: () {
-                                      setState(() => _majors.remove(major));
-                                    },
-                                  ),
-                                );
-                              }),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          TextField(
-                            controller: _majorController,
-                            decoration: _inputDecoration().copyWith(
-                              labelText: 'Custom major',
-                              suffixIcon: IconButton(
-                                tooltip: 'Add major',
-                                onPressed: _addMajor,
-                                icon: const Icon(Icons.add),
-                              ),
-                            ),
-                            onSubmitted: (_) => _addMajor(),
-                          ),
-                          const SizedBox(height: 20),
-                          const _PanelTitle(
-                            icon: Icons.alternate_email,
-                            title: 'Contact Details',
-                          ),
-                          const _FieldLabel('Email Address'),
-                          TextField(
-                            controller: _emailController,
-                            keyboardType: TextInputType.emailAddress,
-                            decoration: _inputDecoration(),
-                          ),
-                          const SizedBox(height: 18),
-                          const _FieldLabel('Phone Number'),
-                          TextField(
-                            controller: _phoneController,
-                            keyboardType: TextInputType.phone,
-                            decoration: _inputDecoration(prefixText: '+855  '),
-                          ),
-                          const SizedBox(height: 28),
-                          SizedBox(
-                            height: 52,
-                            child: ElevatedButton(
-                              onPressed: _isSaving ? null : _discardChanges,
-                              style: ElevatedButton.styleFrom(
-                                elevation: 0,
-                                backgroundColor: const Color(0xFFE2E5E8),
-                                foregroundColor: Colors.black54,
-                              ),
-                              child: const Text('Discard Changes'),
-                            ),
-                          ),
-                          if (_saveMessage != null) ...[
-                            const SizedBox(height: 14),
-                            _SaveMessage(
-                              message: _saveMessage!,
-                              succeeded: _saveSucceeded,
-                            ),
                           ],
-                          const SizedBox(height: 14),
-                          SizedBox(
-                            height: 52,
-                            child: ElevatedButton(
-                              onPressed: _isSaving ? null : _saveProfile,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: primaryColor,
-                                foregroundColor: Colors.white,
-                                elevation: 8,
-                              ),
-                              child: _isSaving
-                                  ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        color: Colors.white,
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Text('Update My Profile'),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _majorController,
+                          decoration: _inputDecoration().copyWith(
+                            labelText: 'Custom major',
+                            suffixIcon: IconButton(
+                              tooltip: 'Add major',
+                              onPressed: _addMajor,
+                              icon: const Icon(Icons.add),
                             ),
+                          ),
+                          onSubmitted: (_) => _addMajor(),
+                        ),
+                        const SizedBox(height: 20),
+                        const _PanelTitle(
+                          icon: Icons.alternate_email,
+                          title: 'Contact Details',
+                        ),
+                        const _FieldLabel('Email Address'),
+                        TextField(
+                          controller: _emailController,
+                          keyboardType: TextInputType.emailAddress,
+                          decoration: _inputDecoration(),
+                        ),
+                        const SizedBox(height: 18),
+                        const _FieldLabel('Phone Number'),
+                        TextField(
+                          controller: _phoneController,
+                          keyboardType: TextInputType.phone,
+                          decoration: _inputDecoration(prefixText: '+855  '),
+                        ),
+                        const SizedBox(height: 28),
+                        SizedBox(
+                          height: 52,
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: _isSaving ? null : _discardChanges,
+                            style: ElevatedButton.styleFrom(
+                              elevation: 0,
+                              backgroundColor: const Color(0xFFE2E5E8),
+                              foregroundColor: Colors.black54,
+                            ),
+                            child: const Text('Discard Changes'),
+                          ),
+                        ),
+                        if (_saveMessage != null) ...[
+                          const SizedBox(height: 14),
+                          _SaveMessage(
+                            message: _saveMessage!,
+                            succeeded: _saveSucceeded,
                           ),
                         ],
-                      ),
+                        const SizedBox(height: 14),
+                        SizedBox(
+                          height: 52,
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: _isSaving ? null : _saveProfile,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: primaryColor,
+                              foregroundColor: Colors.white,
+                              elevation: 8,
+                            ),
+                            child: _isSaving
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Text('Update My Profile'),
+                          ),
+                        ),
+                      ],
                     ),
+                  ),
                 ],
               ),
             ),

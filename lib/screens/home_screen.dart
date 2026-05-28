@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
-import '../data/university_data.dart';
 import '../models/university.dart';
 import '../services/auth_service.dart';
+import '../services/university_service.dart';
 import '../widgets/uniguide_widgets.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -83,35 +84,81 @@ class HomeScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 34),
                   _SectionTitle(
-                    title: 'Featured Universities',
-                    action: 'See all',
-                    onAction: () => Navigator.pushNamed(context, '/search'),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    height: 470,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: universities.take(3).length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 16),
-                      itemBuilder: (context, index) {
-                        final university = universities[index];
-                        return _FeaturedCard(
-                          university: university,
-                          onTap: () => _openDetails(context, university),
-                        );
-                      },
+                    title: 'Top IT & Technology Majors',
+                    action: 'Explore',
+                    onAction: () => Navigator.pushNamed(
+                      context,
+                      '/search',
+                      arguments: 'Information Technology',
                     ),
                   ),
+                  const SizedBox(height: 12),
+                  _TopMajorsList(
+                    majors: _technologyMajors,
+                    onMajorTap: (major) => _openMajorSource(context, major),
+                  ),
                   const SizedBox(height: 34),
-                  const _SectionTitle(title: 'Recommended for You'),
-                  const SizedBox(height: 16),
-                  ...universities.skip(2).take(2).map((university) {
-                    return _RecommendationCard(
-                      university: university,
-                      onTap: () => _openDetails(context, university),
-                    );
-                  }),
+                  StreamBuilder<List<University>>(
+                    stream: UniversityService.universities(),
+                    builder: (context, snapshot) {
+                      final universities = snapshot.data ?? const <University>[];
+
+                      if (snapshot.connectionState == ConnectionState.waiting &&
+                          universities.isEmpty) {
+                        return const Padding(
+                          padding: EdgeInsets.only(top: 40),
+                          child: Center(child: CircularProgressIndicator()),
+                        );
+                      }
+
+                      if (universities.isEmpty) {
+                        return const _EmptyUniversitiesMessage();
+                      }
+
+                      final featured = universities.take(3).toList();
+                      final recommended = universities.skip(2).take(2).toList();
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _SectionTitle(
+                            title: 'Featured Universities',
+                            action: 'See all',
+                            onAction: () =>
+                                Navigator.pushNamed(context, '/search'),
+                          ),
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            height: 470,
+                            child: ListView.separated(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: featured.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(width: 16),
+                              itemBuilder: (context, index) {
+                                final university = featured[index];
+                                return _FeaturedCard(
+                                  university: university,
+                                  onTap: () => _openDetails(context, university),
+                                );
+                              },
+                            ),
+                          ),
+                          if (recommended.isNotEmpty) ...[
+                            const SizedBox(height: 34),
+                            const _SectionTitle(title: 'Recommended for You'),
+                            const SizedBox(height: 16),
+                            ...recommended.map((university) {
+                              return _RecommendationCard(
+                                university: university,
+                                onTap: () => _openDetails(context, university),
+                              );
+                            }),
+                          ],
+                        ],
+                      );
+                    },
+                  ),
                 ]),
               ),
             ),
@@ -123,6 +170,206 @@ class HomeScreen extends StatelessWidget {
 
   void _openDetails(BuildContext context, University university) {
     Navigator.pushNamed(context, '/university-details', arguments: university);
+  }
+
+  Future<void> _openMajorSource(BuildContext context, _PopularMajor major) async {
+    final uri = Uri.parse(major.sourceUrl);
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && context.mounted) {
+      Navigator.pushNamed(context, '/search', arguments: major.name);
+    }
+  }
+}
+
+class _PopularMajor {
+  const _PopularMajor({
+    required this.name,
+    required this.sourceName,
+    required this.sourceUrl,
+  });
+
+  final String name;
+  final String sourceName;
+  final String sourceUrl;
+}
+
+const _technologyMajors = [
+  _PopularMajor(
+    name: 'Computer Science',
+    sourceName: 'BLS',
+    sourceUrl:
+        'https://www.bls.gov/ooh/field-of-degree/computer-and-information/computer-and-information-technology-field-of-degree.htm',
+  ),
+  _PopularMajor(
+    name: 'Information Technology',
+    sourceName: 'BLS',
+    sourceUrl:
+        'https://www.bls.gov/ooh/field-of-degree/computer-and-information/computer-and-information-technology-field-of-degree.htm',
+  ),
+  _PopularMajor(
+    name: 'Software Engineering',
+    sourceName: 'Penn State',
+    sourceUrl:
+        'https://www.psu.edu/academics/undergraduate/majors/pathways/computer-science-information-systems-careers',
+  ),
+  _PopularMajor(
+    name: 'Data Science',
+    sourceName: 'Penn State',
+    sourceUrl:
+        'https://www.psu.edu/academics/undergraduate/majors/pathways/information-technology-data-science-careers',
+  ),
+  _PopularMajor(
+    name: 'Cybersecurity',
+    sourceName: 'Penn State',
+    sourceUrl:
+        'https://www.psu.edu/academics/undergraduate/majors/pathways/information-technology-data-science-careers',
+  ),
+  _PopularMajor(
+    name: 'Artificial Intelligence',
+    sourceName: 'Penn State',
+    sourceUrl:
+        'https://www.psu.edu/academics/undergraduate/majors/pathways/information-technology-data-science-careers',
+  ),
+  _PopularMajor(
+    name: 'Computer Engineering',
+    sourceName: 'BLS',
+    sourceUrl:
+        'https://www.bls.gov/ooh/field-of-degree/computer-and-information/computer-and-information-technology-field-of-degree.htm',
+  ),
+  _PopularMajor(
+    name: 'Information Systems',
+    sourceName: 'Penn State',
+    sourceUrl:
+        'https://www.psu.edu/academics/undergraduate/majors/pathways/computer-science-information-systems-careers',
+  ),
+];
+
+class _TopMajorsList extends StatelessWidget {
+  const _TopMajorsList({
+    required this.majors,
+    required this.onMajorTap,
+  });
+
+  final List<_PopularMajor> majors;
+  final ValueChanged<_PopularMajor> onMajorTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 108,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: majors.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        itemBuilder: (context, index) {
+          final major = majors[index];
+
+          return _TopMajorCard(
+            major: major,
+            onTap: () => onMajorTap(major),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _TopMajorCard extends StatelessWidget {
+  const _TopMajorCard({
+    required this.major,
+    required this.onTap,
+  });
+
+  final _PopularMajor major;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 190,
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFD8DEE2)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: accentColor.withValues(alpha: 0.7),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.trending_up,
+                    color: primaryColor,
+                    size: 19,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  major.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: primaryColor,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.open_in_new,
+                      size: 13,
+                      color: Colors.black45,
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        'Source: ${major.sourceName}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.black54,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyUniversitiesMessage extends StatelessWidget {
+  const _EmptyUniversitiesMessage();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.only(top: 40),
+      child: Center(
+        child: Text(
+          'No universities found in Firestore yet.',
+          style: TextStyle(color: Colors.black54),
+        ),
+      ),
+    );
   }
 }
 
@@ -281,7 +528,7 @@ class _FeaturedCard extends StatelessWidget {
                   Positioned(
                     top: 14,
                     right: 14,
-                    child: RatingBadge(rating: university.rating),
+                    child: ReviewRatingBadge(universityId: university.id),
                   ),
                 ],
               ),
@@ -304,7 +551,11 @@ class _FeaturedCard extends StatelessWidget {
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        const Icon(Icons.location_on_outlined, size: 18, color: Colors.black54),
+                        const Icon(
+                          Icons.location_on_outlined,
+                          size: 18,
+                          color: Colors.black54,
+                        ),
                         Expanded(
                           child: Text(
                             university.location,
@@ -385,8 +636,7 @@ class _RecommendationCard extends StatelessWidget {
               const SizedBox(height: 10),
               Row(
                 children: [
-                  StarRating(rating: university.rating, size: 14),
-                  Text(' ${university.rating.toStringAsFixed(1)}'),
+                  ReviewRatingInline(universityId: university.id),
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 10),
                     child: Text('|'),

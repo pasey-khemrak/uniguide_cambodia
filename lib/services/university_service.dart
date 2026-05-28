@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-import '../data/university_data.dart';
 import '../models/university.dart';
 
 class UniversityService {
@@ -12,18 +11,16 @@ class UniversityService {
 
   static Stream<List<University>> universities() {
     return _universitiesRef
-        .orderBy('name')
         .snapshots()
         .map((snapshot) {
-          if (snapshot.docs.isEmpty) {
-            return universitiesFallback;
-          }
-
-          return snapshot.docs.map((doc) {
+          final universities = snapshot.docs.map((doc) {
             return University.fromMap(doc.data(), id: doc.id);
           }).toList();
+
+          universities.sort((a, b) => a.name.compareTo(b.name));
+          return universities;
         })
-        .handleError((_) => universitiesFallback);
+        .handleError((_) => const <University>[]);
   }
 
   static List<University> filter(List<University> source, String query) {
