@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
+import '../widgets/google_logo.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -301,12 +302,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           height: 50,
                           child: OutlinedButton.icon(
                             onPressed: _isLoading ? null : _signInWithGoogle,
-                            icon: Image.network(
-                              'https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg',
-                              height: 20,
-                              errorBuilder: (_, __, ___) =>
-                                  const Icon(Icons.g_mobiledata, size: 22),
-                            ),
+                            icon: const GoogleLogo(),
                             label: const Text(
                               'Continue with Google account',
                               style: TextStyle(

@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
+import '../widgets/google_logo.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -13,11 +16,23 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  late final StreamSubscription _authSubscription;
   bool _obscurePassword = true;
   bool _isLoading = false;
 
   @override
+  void initState() {
+    super.initState();
+    _authSubscription = AuthService.authStateChanges.listen((user) {
+      if (user != null && mounted && !_isLoading) {
+        Navigator.pushReplacementNamed(context, '/home');
+      }
+    });
+  }
+
+  @override
   void dispose() {
+    _authSubscription.cancel();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -87,7 +102,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                 child: Row(
                   children: [
-                    Icon(Icons.school_outlined, color: Color(0xFF0D3B5E), size: 20),
+                    Icon(Icons.school_outlined,
+                        color: Color(0xFF0D3B5E), size: 20),
                     SizedBox(width: 8),
                     Text(
                       'UniGuide Cambodia',
@@ -145,12 +161,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           height: 50,
                           child: OutlinedButton.icon(
                             onPressed: _isLoading ? null : _signInWithGoogle,
-                            icon: Image.network(
-                              'https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg',
-                              height: 20,
-                              errorBuilder: (_, __, ___) => 
-                                  const Icon(Icons.g_mobiledata, size: 22),
-                            ),
+                            icon: const GoogleLogo(),
                             label: const Text(
                               'Continue with Google account',
                               style: TextStyle(
@@ -176,7 +187,8 @@ class _LoginScreenState extends State<LoginScreen> {
                               padding: EdgeInsets.symmetric(horizontal: 12),
                               child: Text(
                                 'OR CONTINUE WITH EMAIL',
-                                style: TextStyle(fontSize: 11, color: Colors.grey),
+                                style:
+                                    TextStyle(fontSize: 11, color: Colors.grey),
                               ),
                             ),
                             Expanded(child: Divider()),
@@ -222,8 +234,8 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ),
                             GestureDetector(
-                              onTap: () =>
-                                  Navigator.pushNamed(context, '/forgot-password'),
+                              onTap: () => Navigator.pushNamed(
+                                  context, '/forgot-password'),
                               child: const Text(
                                 'Forgot password?',
                                 style: TextStyle(
@@ -255,8 +267,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                   () => _obscurePassword = !_obscurePassword),
                             ),
                           ),
-                          validator: (v) =>
-                              v == null || v.isEmpty ? 'Enter your password' : null,
+                          validator: (v) => v == null || v.isEmpty
+                              ? 'Enter your password'
+                              : null,
                         ),
 
                         const SizedBox(height: 28),
@@ -293,11 +306,12 @@ class _LoginScreenState extends State<LoginScreen> {
                           children: [
                             const Text(
                               "Don't have an account? ",
-                              style: TextStyle(fontSize: 13, color: Colors.grey),
+                              style:
+                                  TextStyle(fontSize: 13, color: Colors.grey),
                             ),
                             GestureDetector(
-                              onTap: () =>
-                                  Navigator.pushReplacementNamed(context, '/register'),
+                              onTap: () => Navigator.pushReplacementNamed(
+                                  context, '/register'),
                               child: const Text(
                                 'Create Account',
                                 style: TextStyle(
@@ -329,7 +343,8 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  InputDecoration _inputDecoration({required String hint, required IconData icon}) {
+  InputDecoration _inputDecoration(
+      {required String hint, required IconData icon}) {
     return InputDecoration(
       hintText: hint,
       hintStyle: const TextStyle(color: Colors.grey, fontSize: 14),

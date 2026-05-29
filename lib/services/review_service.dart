@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/university_review.dart';
+import '../models/user_profile.dart';
 import 'auth_service.dart';
 import 'notification_service.dart';
 
@@ -50,11 +51,19 @@ class ReviewService {
       return;
     }
 
+    final profile = await _currentReviewerProfile();
+    final userName = profile?.name.trim().isNotEmpty == true
+        ? profile!.name.trim()
+        : user.displayName?.trim().isNotEmpty == true
+            ? user.displayName!.trim()
+            : 'Student';
+
     await _reviewsRef(universityId).add({
       'userId': user.uid,
-      'userName': user.displayName?.trim().isNotEmpty == true
-          ? user.displayName!.trim()
-          : 'Student',
+      'userName': userName,
+      'userPhotoUrl': profile?.photoUrl.trim().isNotEmpty == true
+          ? profile!.photoUrl.trim()
+          : user.photoURL ?? '',
       'rating': rating,
       'feedback': feedback.trim(),
       'createdAt': FieldValue.serverTimestamp(),
@@ -80,7 +89,14 @@ class ReviewService {
     required double rating,
     required String feedback,
   }) async {
+    final profile = await _currentReviewerProfile();
+
     await _reviewsRef(universityId).doc(reviewId).update({
+      if (profile != null) ...{
+        'userName':
+            profile.name.trim().isEmpty ? 'Student' : profile.name.trim(),
+        'userPhotoUrl': profile.photoUrl.trim(),
+      },
       'rating': rating,
       'feedback': feedback.trim(),
       'updatedAt': FieldValue.serverTimestamp(),
@@ -101,5 +117,29 @@ class ReviewService {
         .get();
 
     return snapshot.data()?['name'] as String? ?? 'A saved university';
+  }
+
+  static Future<UserProfile?> _currentReviewerProfile() async {
+    final user = AuthService.currentUser;
+    if (user == null) {
+      return null;
+    }
+
+    final snapshot = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
+    final data = snapshot.data();
+    if (data == null) {
+      return null;
+    }
+
+    return UserProfile.fromMap({
+      ...data,
+      'uid': user.uid,
+      'name': data['name'] ?? user.displayName ?? 'Student',
+      'email': data['email'] ?? user.email ?? '',
+      'photoUrl': data['photoUrl'] ?? user.photoURL ?? '',
+    });
   }
 }

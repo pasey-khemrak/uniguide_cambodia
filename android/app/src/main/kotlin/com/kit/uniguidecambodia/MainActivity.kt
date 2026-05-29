@@ -1,4 +1,4 @@
-package com.example.uniguide_cambodia
+package com.kit.uniguidecambodia
 
 import io.flutter.embedding.android.FlutterActivity
 

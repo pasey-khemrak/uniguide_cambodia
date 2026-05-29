@@ -20,6 +20,7 @@ import 'models/user_profile.dart';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
+import 'services/auth_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -47,7 +48,7 @@ class UniGuideApp extends StatelessWidget {
           primary: const Color(0xFF0D3B5E),
         ),
       ),
-      initialRoute: '/onboarding',
+      home: const AuthGate(),
       routes: {
         '/onboarding': (context) => const OnboardingScreen(),
         '/login': (context) => const LoginScreen(),
@@ -84,9 +85,34 @@ class UniGuideApp extends StatelessWidget {
   }
 }
 
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder(
+      stream: AuthService.authStateChanges,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            backgroundColor: Color(0xFFF5F7FA),
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        if (snapshot.data != null) {
+          return const HomeScreen();
+        }
+
+        return const OnboardingScreen();
+      },
+    );
+  }
+}
+
 class UniGuideScrollBehavior extends MaterialScrollBehavior {
   const UniGuideScrollBehavior();
-  
+
   @override
   Set<PointerDeviceKind> get dragDevices => {
         PointerDeviceKind.touch,

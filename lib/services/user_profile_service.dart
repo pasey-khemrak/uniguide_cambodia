@@ -45,6 +45,28 @@ class UserProfileService {
     });
   }
 
+  static Stream<UserProfile?> profileFor(String uid) {
+    if (uid.trim().isEmpty) {
+      return Stream.value(null);
+    }
+
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .snapshots()
+        .map((snapshot) {
+      final data = snapshot.data();
+      if (data == null) {
+        return null;
+      }
+
+      return UserProfile.fromMap({
+        ...data,
+        'uid': uid,
+      });
+    });
+  }
+
   static Future<void> updateProfile(UserProfile profile) async {
     final ref = _profileRef();
     if (ref == null) {
